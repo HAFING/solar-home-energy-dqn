@@ -1,0 +1,4 @@
+policy,reward,grid_import_kwh,unmet_demand_kwh,battery_charge_kwh,battery_discharge_kwh,equivalent_battery_cycles,autonomy_rate_percent,demand_satisfaction_percent,final_soc,outage_hours,idle_actions,charge_actions,discharge_actions
+idle,-421.794922,493.751278,24.21561,0.0,0.0,0.0,30.5555,96.5942,0.5,63,1320,0,0
+rule_based,-307.012932,493.751278,1.21078,30.552514,24.21561,2.421561,30.5555,99.8297,0.980928,63,1128,136,56
+dqn,-307.444363,457.081215,8.569371,55.718589,55.069791,5.506979,35.713,98.7947,0.286287,63,263,918,139
