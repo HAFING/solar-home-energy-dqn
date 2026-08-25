@@ -1,7 +1,7 @@
 ﻿torch
 numpy
 pandas
-matplotlib
 pytest
 pathlib
 pytest
+matplotlib>=3.8,<4
