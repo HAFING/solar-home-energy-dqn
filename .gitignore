@@ -4,5 +4,6 @@ __pycache__/
 .ipynb_checkpoints/
 data/raw/
 models/*.pt
+models/experiments/
 results/*.csv
 results/*.png
