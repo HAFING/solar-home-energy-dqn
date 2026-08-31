@@ -1,0 +1,4 @@
+policy,reward_mean,reward_std,grid_import_kwh_mean,grid_import_kwh_std,unmet_demand_kwh_mean,unmet_demand_kwh_std,battery_throughput_kwh_mean,battery_throughput_kwh_std,battery_degradation_cost_mean,battery_degradation_cost_std,equivalent_battery_cycles_mean,equivalent_battery_cycles_std,autonomy_rate_percent_mean,autonomy_rate_percent_std,demand_satisfaction_percent_mean,demand_satisfaction_percent_std
+dqn,-323.996333,9.677208,454.435372,3.186279,12.307396,2.564874,105.838522,0.899425,1.058385,0.008994,5.291926,0.044971,36.085167,0.448164,98.269,0.360786
+idle,-411.008311,9.611952,496.44793,2.402988,21.518957,2.402988,0.0,0.0,0.0,0.0,0.0,0.0,30.176233,0.337962,96.973467,0.337962
+rule_based,-309.269124,1.753365,496.44793,2.402988,1.075948,0.120149,47.585833,4.927796,0.475858,0.049278,2.379292,0.24639,30.176233,0.337962,99.848667,0.016894

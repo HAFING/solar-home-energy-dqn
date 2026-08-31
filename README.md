@@ -1,8 +1,10 @@
 ﻿# Optimisation de la gestion énergétique d’une maison solaire par DQN
 
-Projet académique de Reinforcement Learning réalisé dans le cadre du cours de Master en Intelligence Artificielle du Dakar Institute of Technology.
+Projet académique de Reinforcement Learning réalisé dans le cadre du Master en Intelligence Artificielle du Dakar Institute of Technology.
 
-Le projet consiste à entraîner un agent Deep Q-Network, implémenté manuellement avec PyTorch, afin d’optimiser la gestion de la batterie d’une maison équipée de panneaux solaires et connectée à un réseau électrique sujet à des coupures.
+Le projet entraîne un agent Deep Q-Network (DQN), implémenté manuellement avec PyTorch, afin de piloter la batterie d’une maison équipée de panneaux solaires et connectée à un réseau électrique sujet à des coupures.
+
+L’objectif est d’équilibrer l’autonomie énergétique, la continuité de service pendant les coupures et la préservation de la batterie.
 
 ## Membres du groupe
 
@@ -11,7 +13,7 @@ Le projet consiste à entraîner un agent Deep Q-Network, implémenté manuellem
 | Metanha | Préparation, nettoyage et normalisation des données énergétiques |
 | Takor | Modélisation de l’environnement énergétique et de la batterie |
 | Ndiaye | Implémentation manuelle du DQN avec PyTorch |
-| Davy | Intégration, simulation des coupures, entraînement, évaluation et visualisation |
+| Davy | Intégration, méthodologie, entraînement, évaluation, expériences, visualisation et démonstration Gradio |
 
 ## Objectifs
 
@@ -22,60 +24,52 @@ Le projet consiste à entraîner un agent Deep Q-Network, implémenté manuellem
 - une batterie ;
 - un réseau électrique disponible ou indisponible.
 
-L’agent doit décider s’il faut :
+L’agent choisit une action parmi :
 
 1. ne rien faire ;
 2. charger la batterie ;
 3. décharger la batterie.
 
-Les objectifs principaux sont :
+Les objectifs sont :
 
-- améliorer l’autonomie énergétique de la maison ;
-- réduire l’importation d’électricité depuis le réseau ;
+- réduire l’importation depuis le réseau ;
+- améliorer l’autonomie énergétique ;
 - limiter la demande non satisfaite pendant les coupures ;
-- préserver autant que possible la durée de vie de la batterie.
+- limiter l’usure liée aux cycles de la batterie.
 
 La revente d’électricité au réseau n’est pas prise en compte.
 
 ## Organisation du projet
-
-Le système suit la chaîne suivante :
 
 ```text
 Données énergétiques
         ↓
 Nettoyage et normalisation
         ↓
-Simulation des coupures du réseau
+Simulation des coupures
         ↓
-Environnement énergétique
+Environnement Gymnasium
         ↓
-Agent DQN
+Agent DQN manuel avec PyTorch
         ↓
 Entraînement et validation
         ↓
-Évaluation sur les données de test
+Évaluation sur données de test
         ↓
-Comparaison avec des stratégies de référence
+Expériences multi-graines et comparaison
+        ↓
+Démonstration interactive Gradio
 ```
 
 ## Données
 
-Le projet utilise un fichier contenant la production photovoltaïque et la consommation électrique horaire de l’année 2023.
+Le jeu de données contient la production photovoltaïque et la consommation électrique horaires de l’année 2023.
 
-Le fichier original est :
+- Fichier source : `data/Dataset.xlsx`
+- Feuille utilisée : `2023 data`
+- Source : <https://zenodo.org/records/15394961>
 
-```text
-data/Dataset.xlsx
-```
-
-La feuille utilisée est :
-
-```text
-2023 data
-```
-
-Les colonnes originales exploitées sont :
+Colonnes utilisées :
 
 ```text
 Date
@@ -83,50 +77,16 @@ PV generation (kW)
 Consumption (kW)
 ```
 
-Le jeu de données utilisé est publié sur Zenodo :
+Le script `src/prepare_data.py` :
 
-https://zenodo.org/records/15394961
+- convertit les dates et valeurs numériques ;
+- supprime les lignes invalides et doublons ;
+- trie les observations chronologiquement ;
+- remplace les valeurs énergétiques négatives par zéro ;
+- ramène la consommation annuelle à 4 500 kWh ;
+- ramène la production solaire à une installation de 5 kWc.
 
-## Préparation des données
-
-Le script suivant assure la préparation des données :
-
-```text
-src/prepare_data.py
-```
-
-Il réalise les opérations suivantes :
-
-- lecture de la feuille `2023 data` ;
-- conversion des dates ;
-- conversion des valeurs numériques ;
-- suppression des lignes invalides ;
-- suppression des doublons ;
-- tri chronologique des observations ;
-- remplacement des valeurs énergétiques négatives par zéro ;
-- normalisation de la consommation annuelle ;
-- normalisation de la production photovoltaïque ;
-- création du fichier final au format CSV.
-
-La consommation est ramenée à :
-
-```text
-4 500 kWh par an
-```
-
-La production solaire est ramenée à une installation de :
-
-```text
-5 kWc
-```
-
-Le fichier préparé est :
-
-```text
-data/processed_energy.csv
-```
-
-Il contient 8 760 observations horaires et les colonnes suivantes :
+Le fichier final `data/processed_energy.csv` contient 8 760 observations horaires :
 
 ```text
 timestamp
@@ -134,86 +94,69 @@ load_kwh
 pv_kwh
 ```
 
-## Découpage des données
+## Découpage chronologique et normalisation
 
-Les données sont séparées chronologiquement afin d’éviter de mélanger les observations passées et futures.
+Les données sont séparées sans mélange aléatoire, afin d’éviter l’utilisation d’observations futures pendant l’entraînement.
 
-| Ensemble | Durée | Nombre d’observations |
+| Ensemble | Durée | Observations |
 |---|---:|---:|
 | Entraînement | 255 jours | 6 120 |
 | Validation | 55 jours | 1 320 |
 | Test | 55 jours | 1 320 |
 
-Le découpage aléatoire n’est pas utilisé, car il serait inadapté à une série temporelle.
+Les échelles de normalisation de la production solaire et de la consommation sont calculées uniquement sur l’ensemble d’entraînement. Les mêmes échelles sont ensuite appliquées à la validation et au test.
+
+Cette précaution évite une fuite d’information depuis les données futures.
 
 ## Simulation des coupures
 
-Le module suivant adapte les données à l’environnement et simule les coupures :
-
-```text
-src/integration_data.py
-```
-
-Il transforme les colonnes :
+Le module `src/integration_data.py` adapte les données pour l’environnement :
 
 ```text
 load_kwh → consumption
 pv_kwh   → pv_production
 ```
 
-Il ajoute également la colonne :
-
-```text
-grid_available
-```
-
-Sa signification est :
+Il ajoute la colonne `grid_available` :
 
 - `1` : réseau disponible ;
 - `0` : coupure du réseau.
 
-Avec la graine aléatoire `42`, la simulation produit :
+Avec la graine `42`, la simulation produit 392 heures de coupure, avec des durées comprises entre une et quatre heures.
 
-- 392 heures de coupure ;
-- un taux de disponibilité du réseau d’environ 95,53 % ;
-- des coupures d’une durée comprise entre 1 et 4 heures.
-
-L’utilisation d’une graine fixe rend l’expérience reproductible.
+Les expériences utilisent plusieurs graines aléatoires afin de mesurer la stabilité des résultats.
 
 ## Environnement de Reinforcement Learning
 
-L’environnement énergétique est défini dans :
+L’environnement est défini dans `src/environment/energy_environment.py`.
 
-```text
-src/environment/energy_environment.py
-```
+La classe `EnergyEnvironment` respecte l’API de Gymnasium :
 
-La classe principale est :
+- `reset()` retourne l’observation initiale et les informations ;
+- `step()` retourne l’observation suivante, la récompense, les indicateurs de fin d’épisode et les informations ;
+- l’espace d’actions est discret avec trois actions ;
+- l’espace d’observation contient six variables.
 
-```python
-EnergyEnvironment
-```
+Gymnasium fournit une interface standard pour l’environnement ; l’algorithme DQN reste implémenté manuellement avec PyTorch.
 
 ### État
 
-L’état observé par l’agent contient six valeurs :
+L’état observé par l’agent contient :
 
 ```text
 [
     production_solaire_normalisée,
     consommation_normalisée,
-    niveau_de_la_batterie,
+    niveau_de_batterie,
     disponibilité_du_réseau,
     sinus_de_l_heure,
     cosinus_de_l_heure
 ]
 ```
 
-Les composantes sinus et cosinus permettent de représenter le caractère cyclique des heures de la journée.
+Les composantes sinus et cosinus représentent le caractère cyclique des heures de la journée.
 
 ### Actions
-
-L’agent peut choisir entre trois actions discrètes :
 
 | Action | Valeur | Signification |
 |---|---:|---|
@@ -223,8 +166,6 @@ L’agent peut choisir entre trois actions discrètes :
 
 ### Batterie
 
-Les principales caractéristiques de la batterie sont :
-
 | Paramètre | Valeur |
 |---|---:|
 | Capacité | 10 kWh |
@@ -232,31 +173,39 @@ Les principales caractéristiques de la batterie sont :
 | Puissance maximale | 2 kW |
 | Rendement | 95 % |
 
+L’environnement calcule également :
+
+- le débit énergétique total de la batterie ;
+- le coût de dégradation associé à ce débit ;
+- les cycles équivalents.
+
+```text
+cycles_équivalents = débit_batterie / (2 × capacité_batterie)
+```
+
 ### Récompense
 
-La récompense encourage l’utilisation de l’énergie solaire et pénalise :
+La récompense encourage l’utilisation directe de l’énergie solaire et pénalise :
 
-- l’importation d’électricité depuis le réseau ;
+- l’importation depuis le réseau ;
 - la demande non satisfaite ;
-- l’utilisation de la batterie.
-
-La fonction utilisée est :
+- le débit de la batterie, afin de représenter son usure.
 
 ```text
 récompense =
     énergie_solaire_utilisée
     - importation_du_réseau
     - 5 × demande_non_satisfaite
-    - 0,01 × décharge_de_la_batterie
+    - 0,01 × débit_de_la_batterie
 ```
 
 La demande non satisfaite reçoit la pénalité la plus élevée, car elle correspond à une consommation qui n’a pas pu être alimentée pendant une coupure.
 
 ## Agent DQN
 
-Le DQN est implémenté manuellement avec PyTorch, sans utiliser de bibliothèque spécialisée de Reinforcement Learning.
+Le DQN est implémenté manuellement avec PyTorch, sans Stable-Baselines3 ni RLlib.
 
-Les fichiers principaux sont :
+Fichiers principaux :
 
 ```text
 src/dqn.py
@@ -276,22 +225,20 @@ Couche cachée : 64 neurones + ReLU
 Sortie : 3 valeurs Q
 ```
 
-Chaque valeur de sortie représente la valeur estimée d’une action.
+Chaque sortie représente la valeur Q estimée pour une action.
 
 ### Composants implémentés
 
-Le projet contient :
-
-- un réseau de politique ;
-- un réseau cible ;
-- un replay buffer ;
-- une stratégie epsilon-greedy ;
-- l’équation de Bellman ;
-- une fonction de perte Smooth L1 ;
-- un optimiseur Adam ;
-- le gradient clipping ;
-- la synchronisation périodique du réseau cible ;
-- la sauvegarde et le chargement du modèle.
+- réseau de politique ;
+- réseau cible ;
+- replay buffer ;
+- stratégie epsilon-greedy ;
+- équation de Bellman ;
+- perte Smooth L1 ;
+- optimiseur Adam ;
+- gradient clipping ;
+- synchronisation périodique du réseau cible ;
+- sauvegarde et chargement du modèle.
 
 ### Hyperparamètres principaux
 
@@ -307,46 +254,47 @@ Le projet contient :
 | Epsilon initial | 1,00 |
 | Epsilon minimum | 0,05 |
 | Epsilon decay | 0,99995 |
-| Fréquence de mise à jour du réseau cible | 250 |
-| Nombre d’épisodes | 10 |
+| Mise à jour du réseau cible | 250 optimisations |
+| Épisodes par expérience | 30 |
+| Graines évaluées | 42, 123, 2026 |
+
+## Métriques d’évaluation
+
+L’autonomie énergétique mesure la part de la consommation qui ne dépend pas du réseau :
+
+```text
+autonomie = 100 × (1 - importation_du_réseau / consommation_totale)
+```
+
+La demande non satisfaite est volontairement suivie dans une métrique distincte, car elle mesure la continuité du service pendant les coupures :
+
+```text
+satisfaction_de_la_demande =
+    100 × (1 - demande_non_satisfaite / consommation_totale)
+```
+
+Cette séparation permet de distinguer clairement :
+
+- la dépendance au réseau ;
+- la capacité à satisfaire la consommation lors des coupures.
 
 ## Installation
 
-### Prérequis
+Prérequis :
 
 - Python 3.11 recommandé ;
 - Git ;
 - pip.
 
-### Cloner le dépôt
-
 ```powershell
 git clone https://github.com/HAFING/solar-home-energy-dqn.git
 cd solar-home-energy-dqn
-```
 
-### Créer l’environnement virtuel
-
-```powershell
 python -m venv .venv
-```
-
-### Activer l’environnement sous PowerShell
-
-```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
-```
 
-### Mettre pip à jour
-
-```powershell
 python -m pip install --upgrade pip
-```
-
-### Installer les dépendances
-
-```powershell
 python -m pip install -r requirements.txt
 ```
 
@@ -356,69 +304,37 @@ python -m pip install -r requirements.txt
 
 ```powershell
 python -m src.prepare_data
-```
-
-Cette commande génère :
-
-```text
-data/processed_energy.csv
-```
-
-### Vérifier l’intégration des données
-
-```powershell
 python -m src.integration_data
 ```
 
-Cette commande affiche notamment :
-
-- le nombre total d’observations ;
-- la taille des trois ensembles ;
-- le nombre d’heures de coupure ;
-- le taux de disponibilité du réseau.
-
-### Entraîner le DQN
-
-Pour effectuer un test rapide :
+### Exécuter une expérience rapide
 
 ```powershell
-python train.py --episodes 1
+python run_experiments.py --episodes 1 --seeds 42
 ```
 
-Pour reproduire l’expérience principale :
+### Reproduire les expériences principales
 
 ```powershell
-python train.py --episodes 10
+python run_experiments.py --episodes 30 --seeds 42 123 2026
 ```
 
-Le meilleur modèle est enregistré dans :
+Cette commande produit :
 
 ```text
-models/best_dqn.pt
+results/experiments/manifest.csv
+results/experiments/summary.csv
+results/experiments/all_evaluation_results.csv
+results/experiments/training_seed_*.csv
+results/experiments/evaluation_seed_*.csv
 ```
 
-Les métriques sont enregistrées dans :
+Le modèle officiel `models/best_dqn.pt` correspond à la graine sélectionnée selon la meilleure récompense de validation.
 
-```text
-results/training_metrics.csv
-```
-
-### Évaluer le modèle
+### Évaluer le modèle officiel
 
 ```powershell
 python evaluate.py
-```
-
-L’évaluation compare trois stratégies :
-
-- `idle` : la batterie n’est jamais utilisée ;
-- `rule_based` : la batterie est contrôlée par des règles simples ;
-- `dqn` : les actions sont choisies par le modèle entraîné.
-
-Les résultats sont enregistrés dans :
-
-```text
-results/evaluation_results.csv
 ```
 
 ### Générer les graphiques
@@ -434,92 +350,114 @@ results/figures/training_progress.png
 results/figures/policy_comparison.png
 ```
 
-### Exécuter les tests
+### Lancer la démonstration Gradio
 
-Pour lancer l’ensemble des tests :
+```powershell
+python app.py
+```
+
+Ouvrez ensuite l’adresse locale affichée par PowerShell, généralement :
+
+```text
+http://127.0.0.1:7860
+```
+
+L’interface comporte quatre onglets :
+
+- comparaison des politiques ;
+- analyse détaillée de la politique sélectionnée ;
+- graphiques du projet ;
+- méthodologie.
+
+Elle permet également de relancer l’évaluation officielle à partir du modèle enregistré.
+
+### Exécuter les tests
 
 ```powershell
 python -m pytest -q
 ```
 
-Résultat obtenu lors de l’expérience :
+Résultat de la vérification finale :
 
 ```text
-36 passed
+59 passed
 ```
 
-## Résultats de l’entraînement
+## Résultats expérimentaux
 
-L’entraînement principal a été réalisé sur 10 épisodes.
+Trois expériences indépendantes ont été exécutées avec les graines `42`, `123` et `2026`, sur 30 épisodes chacune.
 
-La meilleure récompense de validation obtenue est :
+La sélection du modèle est faite à partir de la récompense de validation, et non à partir des données de test.
 
-```text
-58,37
-```
+| Graine | Épisodes | Meilleure récompense de validation |
+|---:|---:|---:|
+| 42 | 30 | 64,159038 |
+| 123 | 30 | 56,597855 |
+| 2026 | 30 | 52,916793 |
 
-Le meilleur modèle a été obtenu au deuxième épisode et sauvegardé automatiquement.
+La meilleure graine est `42`. Son modèle devient le modèle officiel évalué dans `models/best_dqn.pt`.
 
-![Progression de l’entraînement](results/figures/training_progress.png)
+### Résultats moyens sur trois graines
 
-## Résultats sur les données de test
+| Politique | Récompense | Import réseau | Demande non satisfaite | Autonomie | Cycles équivalents |
+|---|---:|---:|---:|---:|---:|
+| Batterie inactive | -411,01 ± 9,61 | 496,45 ± 2,40 kWh | 21,52 ± 2,40 kWh | 30,04 ± 0,34 % | 0,00 |
+| Règles simples | -309,27 ± 1,75 | 496,45 ± 2,40 kWh | 1,08 ± 0,12 kWh | 30,04 ± 0,34 % | 2,38 ± 0,25 |
+| DQN | -324,00 ± 9,68 | 454,44 ± 3,19 kWh | 12,31 ± 2,56 kWh | 36,09 ± 0,45 % | 5,29 ± 0,04 |
+
+### Résultats du modèle officiel, graine 42
 
 | Politique | Récompense | Import réseau | Demande non satisfaite | Autonomie | Cycles équivalents |
 |---|---:|---:|---:|---:|---:|
 | Batterie inactive | -421,79 | 493,75 kWh | 24,22 kWh | 30,56 % | 0,00 |
-| Règles simples | -307,01 | 493,75 kWh | 1,21 kWh | 30,56 % | 2,42 |
-| DQN | -307,44 | 457,08 kWh | 8,57 kWh | 35,71 % | 5,51 |
+| Règles simples | -307,30 | 493,75 kWh | 1,21 kWh | 30,56 % | 2,66 |
+| DQN | -322,31 | 454,28 kWh | 12,00 kWh | 36,11 % | 5,33 |
+
+![Progression de l’entraînement](results/figures/training_progress.png)
 
 ![Comparaison des politiques](results/figures/policy_comparison.png)
 
-## Analyse des résultats
+## Analyse
 
 Comparativement à une batterie inactive, le DQN :
 
-- réduit l’importation du réseau de 36,67 kWh ;
-- augmente l’autonomie énergétique de 5,15 points ;
-- réduit la demande non satisfaite de 24,22 à 8,57 kWh ;
-- améliore fortement la récompense globale.
+- réduit l’importation moyenne du réseau d’environ 42 kWh ;
+- augmente l’autonomie moyenne de 6,05 points ;
+- réduit la demande non satisfaite moyenne ;
+- produit des résultats stables sur les trois graines.
 
-La stratégie à règles obtient néanmoins une récompense légèrement supérieure au DQN et limite mieux la demande non satisfaite.
+La stratégie à règles simples reste néanmoins meilleure pour :
 
-Le DQN décharge plus fréquemment la batterie pour réduire l’importation depuis le réseau. Cette politique améliore l’autonomie, mais augmente le nombre de cycles de la batterie et peut laisser moins d’énergie disponible lorsqu’une coupure survient.
-
-Les résultats montrent donc un compromis entre :
-
-- l’autonomie énergétique ;
-- la satisfaction de la demande pendant les coupures ;
+- la récompense globale ;
+- la limitation de la demande non satisfaite ;
 - la préservation de la batterie.
 
-## Limites
+Le DQN obtient la meilleure autonomie, mais sollicite davantage la batterie : environ 5,29 cycles équivalents, contre 2,38 pour la politique à règles.
 
-Les principales limites de cette version sont :
+Ce résultat est cohérent avec l’absence de prévision des futures coupures : la politique à règles conserve plus souvent la batterie pour les coupures, tandis que le DQN la décharge plus volontiers pour réduire l’importation du réseau.
 
-- seulement 10 épisodes d’entraînement ;
-- une seule graine aléatoire utilisée ;
-- des coupures simulées et non issues de données réelles ;
-- absence de prévision de la production solaire ;
-- absence de prévision de la consommation ;
-- absence de prévision des futures coupures ;
-- fonction de récompense encore perfectible ;
-- DQN moins performant que la stratégie à règles sur certains critères ;
-- utilisation relativement importante de la batterie par le DQN.
+Le projet met ainsi en évidence un compromis concret entre autonomie, continuité de service et durée de vie de la batterie.
 
-## Améliorations possibles
+## Limites et améliorations possibles
 
-Le projet pourrait être amélioré en :
+Les principales limites sont :
 
-- augmentant le nombre d’épisodes ;
-- répétant les expériences avec plusieurs graines ;
-- ajustant les coefficients de la récompense ;
-- pénalisant davantage les niveaux de batterie trop faibles ;
-- pénalisant plus fortement les cycles de charge et de décharge ;
-- ajoutant une prévision de la production solaire ;
-- ajoutant une prévision de la consommation ;
-- ajoutant une estimation du risque de coupure ;
-- recherchant automatiquement les meilleurs hyperparamètres ;
-- comparant DQN à Double DQN ou Dueling DQN ;
-- ajoutant une interface interactive avec Gradio.
+- les coupures sont simulées, et non observées dans des données réelles ;
+- l’agent ne connaît pas les futures coupures ;
+- l’agent ne dispose pas de prévisions de production solaire ou de consommation ;
+- seules trois graines et trente épisodes ont été évalués ;
+- le DQN reste moins performant que les règles simples sur certains critères ;
+- les coefficients de récompense peuvent encore être ajustés.
+
+Améliorations envisageables :
+
+- ajouter des prévisions de consommation et de production solaire ;
+- estimer le risque de coupure future ;
+- tester davantage de graines et d’épisodes ;
+- effectuer une recherche d’hyperparamètres ;
+- comparer DQN, Double DQN et Dueling DQN ;
+- utiliser les capacités de parallélisation de RLlib pour des campagnes plus larges ;
+- permettre à l’utilisateur de modifier les paramètres de simulation dans Gradio.
 
 ## Structure du dépôt
 
@@ -531,43 +469,43 @@ solar-home-energy-dqn/
 ├── models/
 │   └── best_dqn.pt
 ├── results/
-│   ├── training_metrics.csv
+│   ├── experiments/
+│   ├── figures/
 │   ├── evaluation_results.csv
-│   └── figures/
-│       ├── training_progress.png
-│       └── policy_comparison.png
+│   └── training_metrics.csv
 ├── src/
+│   ├── environment/
+│   │   └── energy_environment.py
 │   ├── agent.py
 │   ├── dqn.py
-│   ├── replay_buffer.py
-│   ├── prepare_data.py
 │   ├── integration_data.py
-│   └── environment/
-│       └── energy_environment.py
+│   ├── prepare_data.py
+│   └── replay_buffer.py
 ├── tests/
-├── train.py
+├── app.py
 ├── evaluate.py
 ├── plot_results.py
+├── run_experiments.py
+├── train.py
 ├── requirements.txt
 └── README.md
 ```
 
 ## Collaboration et versionnement
 
-Le projet a été développé avec des branches Git distinctes :
+Le projet a été construit avec des branches et Pull Requests distinctes afin de conserver la traçabilité des contributions.
 
 ```text
 data/energy-pipeline
 feature/energy-environment
 feature/dqn-network
 integration/training-evaluation
+fix/rl-methodology
 ```
-
-Les contributions ont été intégrées progressivement avec des commits et des Pull Requests afin de conserver la traçabilité du travail de chaque membre.
 
 ## Conclusion
 
-Ce projet met en œuvre toute la chaîne d’un problème de Reinforcement Learning :
+Ce projet couvre l’ensemble de la chaîne d’un problème de Reinforcement Learning :
 
 ```text
 Données
@@ -578,11 +516,13 @@ Environnement
     ↓
 Agent DQN
     ↓
-Entraînement
+Entraînement et validation
     ↓
-Validation
+Évaluation sur données de test
     ↓
-Évaluation
+Analyse reproductible sur plusieurs graines
+    ↓
+Démonstration interactive
 ```
 
-Le DQN améliore l’autonomie énergétique de la maison et réduit sa dépendance au réseau. Les résultats montrent également que la conception de la récompense joue un rôle essentiel pour équilibrer autonomie, fiabilité énergétique et durée de vie de la batterie.
+Le DQN réduit la dépendance au réseau et obtient la meilleure autonomie énergétique. La comparaison avec une politique à règles met également en évidence l’importance de la conception de la récompense, de la continuité de service et de la préservation de la batterie.

@@ -1,26 +1,34 @@
+"""Environnement Gymnasium de gestion énergétique d'une maison solaire."""
+
 import math
+
+import gymnasium as gym
 import numpy as np
+from gymnasium import spaces
 
 
-class EnergyEnvironment:
-    """
-    Solar Home Energy Environment
+class EnergyEnvironment(gym.Env):
+    """Simule la gestion horaire d'une maison solaire avec batterie.
 
-    State:
+    État :
         [
-            pv_normalized,
-            consumption_normalized,
-            soc,
-            grid_available,
-            sin_hour,
-            cos_hour
+            production photovoltaïque normalisée,
+            consommation normalisée,
+            état de charge de la batterie,
+            disponibilité du réseau,
+            sinus de l'heure,
+            cosinus de l'heure,
         ]
 
-    Actions:
+    Actions :
         0 -> IDLE
         1 -> CHARGE
         2 -> DISCHARGE
     """
+
+    metadata = {
+        "render_modes": [],
+    }
 
     IDLE = 0
     CHARGE = 1
@@ -30,48 +38,252 @@ class EnergyEnvironment:
     INITIAL_SOC = 0.50
     MAX_BATTERY_POWER = 2.0
     BATTERY_EFFICIENCY = 0.95
+    DEFAULT_DEGRADATION_WEIGHT = 0.01
 
-    def __init__(self, data):
-        self.data = data
+    def __init__(
+        self,
+        data,
+        pv_scale: float | None = None,
+        consumption_scale: float | None = None,
+        initial_soc: float = INITIAL_SOC,
+        battery_degradation_weight: float = (
+            DEFAULT_DEGRADATION_WEIGHT
+        ),
+    ):
+        super().__init__()
+
+        required_columns = {
+            "pv_production",
+            "consumption",
+            "grid_available",
+        }
+
+        missing_columns = required_columns.difference(
+            data.columns
+        )
+
+        if missing_columns:
+            raise ValueError(
+                "Colonnes manquantes : "
+                + ", ".join(
+                    sorted(missing_columns)
+                )
+            )
+
+        if len(data) == 0:
+            raise ValueError(
+                "L'environnement nécessite au moins "
+                "une observation."
+            )
+
+        if not 0 <= initial_soc <= 1:
+            raise ValueError(
+                "initial_soc doit être compris entre 0 et 1."
+            )
+
+        if (
+            not np.isfinite(
+                battery_degradation_weight
+            )
+            or battery_degradation_weight < 0
+        ):
+            raise ValueError(
+                "battery_degradation_weight doit être "
+                "un nombre positif ou nul."
+            )
+
+        self.data = (
+            data.reset_index(
+                drop=True
+            ).copy()
+        )
+
+        self.initial_soc = float(
+            initial_soc
+        )
+
+        self.battery_degradation_weight = float(
+            battery_degradation_weight
+        )
+
+        inferred_pv_scale = max(
+            float(
+                self.data[
+                    "pv_production"
+                ].max()
+            ),
+            1.0,
+        )
+
+        inferred_consumption_scale = max(
+            float(
+                self.data[
+                    "consumption"
+                ].max()
+            ),
+            1.0,
+        )
+
+        self.pv_scale = (
+            float(pv_scale)
+            if pv_scale is not None
+            else inferred_pv_scale
+        )
+
+        self.consumption_scale = (
+            float(consumption_scale)
+            if consumption_scale is not None
+            else inferred_consumption_scale
+        )
+
+        if self.pv_scale <= 0:
+            raise ValueError(
+                "pv_scale doit être strictement positif."
+            )
+
+        if self.consumption_scale <= 0:
+            raise ValueError(
+                "consumption_scale doit être "
+                "strictement positif."
+            )
+
+        self.pv_max = self.pv_scale
+        self.consumption_max = (
+            self.consumption_scale
+        )
+
+        self.action_space = spaces.Discrete(
+            3
+        )
+
+        self.observation_space = spaces.Box(
+            low=np.array(
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    -1.0,
+                    -1.0,
+                ],
+                dtype=np.float32,
+            ),
+            high=np.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                ],
+                dtype=np.float32,
+            ),
+            dtype=np.float32,
+        )
+
+        self.render_mode = None
         self.current_step = 0
-        self.soc = self.INITIAL_SOC
+        self.soc = self.initial_soc
 
-        self.pv_max = max(
-            float(data["pv_production"].max()),
-            1.0
+    def reset(
+        self,
+        *,
+        seed: int | None = None,
+        options: dict | None = None,
+    ):
+        """Réinitialise l'épisode."""
+
+        super().reset(
+            seed=seed
         )
 
-        self.consumption_max = max(
-            float(data["consumption"].max()),
-            1.0
-        )
-
-    def reset(self):
         self.current_step = 0
-        self.soc = self.INITIAL_SOC
-        return self._get_state()
+        reset_soc = self.initial_soc
 
-    def _get_state(self):
-        row = self.data.iloc[self.current_step]
+        if (
+            options is not None
+            and "initial_soc" in options
+        ):
+            reset_soc = float(
+                options["initial_soc"]
+            )
 
-        pv = row["pv_production"]
-        consumption = row["consumption"]
-        grid_available = row["grid_available"]
+            if not 0 <= reset_soc <= 1:
+                raise ValueError(
+                    "Le SOC initial doit être "
+                    "compris entre 0 et 1."
+                )
 
-        pv_normalized = min(pv / self.pv_max, 1.0)
-        consumption_normalized = min(
-            consumption / self.consumption_max,
-            1.0
+        self.soc = reset_soc
+
+        observation = self._get_state()
+        info = {}
+
+        return observation, info
+
+    def _get_state(self) -> np.ndarray:
+        """Construit l'observation de l'heure actuelle."""
+
+        row = self.data.iloc[
+            self.current_step
+        ]
+
+        pv = float(
+            row["pv_production"]
         )
 
-        hour = self.current_step % 24
+        consumption = float(
+            row["consumption"]
+        )
+
+        grid_available = float(
+            row["grid_available"]
+        )
+
+        pv_normalized = np.clip(
+            pv / self.pv_scale,
+            0.0,
+            1.0,
+        )
+
+        consumption_normalized = np.clip(
+            consumption
+            / self.consumption_scale,
+            0.0,
+            1.0,
+        )
+
+        if "timestamp" in self.data.columns:
+            timestamp = row[
+                "timestamp"
+            ]
+
+            hour = int(
+                getattr(
+                    timestamp,
+                    "hour",
+                    self.current_step % 24,
+                )
+            )
+        else:
+            hour = (
+                self.current_step
+                % 24
+            )
 
         sin_hour = math.sin(
-            2 * math.pi * hour / 24
+            2
+            * math.pi
+            * hour
+            / 24
         )
 
         cos_hour = math.cos(
-            2 * math.pi * hour / 24
+            2
+            * math.pi
+            * hour
+            / 24
         )
 
         return np.array(
@@ -87,75 +299,101 @@ class EnergyEnvironment:
         )
 
     def step(self, action):
+        """Applique une action et avance d'une heure."""
 
-        if action not in [
-            self.IDLE,
-            self.CHARGE,
-            self.DISCHARGE,
-        ]:
+        if not self.action_space.contains(
+            action
+        ):
             raise ValueError(
-                f"Invalid action: {action}"
+                f"Action invalide : {action}"
             )
 
-        row = self.data.iloc[self.current_step]
+        action = int(action)
 
-        pv = float(row["pv_production"])
-        consumption = float(row["consumption"])
-        grid_available = int(row["grid_available"])
+        row = self.data.iloc[
+            self.current_step
+        ]
+
+        pv = float(
+            row["pv_production"]
+        )
+
+        consumption = float(
+            row["consumption"]
+        )
+
+        grid_available = int(
+            row["grid_available"]
+        )
 
         battery_energy = (
-            self.soc * self.BATTERY_CAPACITY
+            self.soc
+            * self.BATTERY_CAPACITY
         )
 
         solar_used = min(
             pv,
-            consumption
+            consumption,
         )
 
         surplus = max(
             pv - consumption,
-            0.0
+            0.0,
         )
 
         deficit = max(
             consumption - pv,
-            0.0
+            0.0,
         )
 
         battery_charge = 0.0
+        battery_energy_stored = 0.0
         battery_discharge = 0.0
         grid_import = 0.0
         unmet_demand = 0.0
 
-        # CHARGE
-        if action == self.CHARGE and surplus > 0:
-
+        if (
+            action == self.CHARGE
+            and surplus > 0
+        ):
             available_capacity = (
                 self.BATTERY_CAPACITY
                 - battery_energy
             )
 
+            maximum_charge_input = (
+                available_capacity
+                / self.BATTERY_EFFICIENCY
+            )
+
             battery_charge = min(
                 surplus,
                 self.MAX_BATTERY_POWER,
-                available_capacity
+                maximum_charge_input,
             )
 
-            battery_energy += (
+            battery_energy_stored = (
                 battery_charge
                 * self.BATTERY_EFFICIENCY
             )
 
-        # DISCHARGE
-        if action == self.DISCHARGE and deficit > 0:
+            battery_energy += (
+                battery_energy_stored
+            )
 
+        if (
+            action == self.DISCHARGE
+            and deficit > 0
+        ):
             battery_discharge = min(
                 deficit,
                 self.MAX_BATTERY_POWER,
-                battery_energy
+                battery_energy,
             )
 
-            battery_energy -= battery_discharge
+            battery_energy -= (
+                battery_discharge
+            )
 
             deficit -= (
                 battery_discharge
@@ -163,43 +401,58 @@ class EnergyEnvironment:
             )
 
         if deficit > 0:
-
             if grid_available == 1:
                 grid_import = deficit
             else:
                 unmet_demand = deficit
 
-        self.soc = (
-            battery_energy
-            / self.BATTERY_CAPACITY
+        self.soc = float(
+            np.clip(
+                battery_energy
+                / self.BATTERY_CAPACITY,
+                0.0,
+                1.0,
+            )
         )
 
-        self.soc = max(
-            0.0,
-            min(1.0, self.soc)
+        battery_throughput = (
+            battery_energy_stored
+            + battery_discharge
+        )
+
+        battery_degradation_cost = (
+            self.battery_degradation_weight
+            * battery_throughput
         )
 
         reward = (
             solar_used
             - grid_import
-            - (5 * unmet_demand)
-            - (0.01 * battery_discharge)
+            - (
+                5.0
+                * unmet_demand
+            )
+            - battery_degradation_cost
         )
 
         self.current_step += 1
 
-        done = (
+        terminated = (
             self.current_step
             >= len(self.data)
         )
 
-        if done:
+        truncated = False
+
+        if terminated:
             next_state = np.zeros(
-                6,
-                dtype=np.float32
+                self.observation_space.shape,
+                dtype=np.float32,
             )
         else:
-            next_state = self._get_state()
+            next_state = (
+                self._get_state()
+            )
 
         info = {
             "pv_production": pv,
@@ -207,7 +460,18 @@ class EnergyEnvironment:
             "soc": self.soc,
             "grid_available": grid_available,
             "battery_charge": battery_charge,
-            "battery_discharge": battery_discharge,
+            "battery_energy_stored": (
+                battery_energy_stored
+            ),
+            "battery_discharge": (
+                battery_discharge
+            ),
+            "battery_throughput": (
+                battery_throughput
+            ),
+            "battery_degradation_cost": (
+                battery_degradation_cost
+            ),
             "grid_import": grid_import,
             "unmet_demand": unmet_demand,
             "solar_used": solar_used,
@@ -215,7 +479,18 @@ class EnergyEnvironment:
 
         return (
             next_state,
-            reward,
-            done,
+            float(reward),
+            terminated,
+            truncated,
             info,
         )
+
+    def render(self):
+        """Aucun rendu graphique natif."""
+
+        return None
+
+    def close(self):
+        """Libère les éventuelles ressources."""
+
+        return None

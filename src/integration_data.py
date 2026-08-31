@@ -172,6 +172,67 @@ def split_environment_data(
 
     return train_data, validation_data, test_data
 
+def compute_normalization_scales(
+    training_data: pd.DataFrame,
+) -> tuple[float, float]:
+    """Calcule les échelles uniquement sur les données d'entraînement.
+
+    Les valeurs retournées doivent ensuite être réutilisées sans
+    recalcul pour l'entraînement, la validation et le test.
+    """
+
+    required_columns = {
+        "pv_production",
+        "consumption",
+    }
+
+    missing_columns = required_columns.difference(
+        training_data.columns
+    )
+
+    if missing_columns:
+        raise ValueError(
+            "Colonnes manquantes pour la normalisation : "
+            + ", ".join(sorted(missing_columns))
+        )
+
+    if training_data.empty:
+        raise ValueError(
+            "Les données d'entraînement sont vides."
+        )
+
+    pv_maximum = float(
+        training_data["pv_production"].max()
+    )
+
+    consumption_maximum = float(
+        training_data["consumption"].max()
+    )
+
+    if not np.isfinite(pv_maximum):
+        raise ValueError(
+            "Le maximum de production solaire est invalide."
+        )
+
+    if not np.isfinite(consumption_maximum):
+        raise ValueError(
+            "Le maximum de consommation est invalide."
+        )
+
+    pv_scale = max(
+        pv_maximum,
+        1.0,
+    )
+
+    consumption_scale = max(
+        consumption_maximum,
+        1.0,
+    )
+
+    return (
+        pv_scale,
+        consumption_scale,
+    )
 
 if __name__ == "__main__":
     environment_data = load_environment_data()

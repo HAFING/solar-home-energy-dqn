@@ -10,23 +10,46 @@ TRAINING_PATH = Path("results/training_metrics.csv")
 EVALUATION_PATH = Path("results/evaluation_results.csv")
 FIGURES_DIRECTORY = Path("results/figures")
 
+POLICY_LABELS = {
+    "idle": "Batterie inactive",
+    "rule_based": "Règles simples",
+    "dqn": "DQN",
+}
+
+POLICY_COLORS = ["gray", "orange", "royalblue"]
+
+
+def add_value_labels(axis, decimals: int = 2) -> None:
+    """Affiche la valeur numérique au-dessus de chaque barre."""
+    for bar in axis.patches:
+        value = bar.get_height()
+        axis.annotate(
+            f"{value:.{decimals}f}",
+            xy=(bar.get_x() + bar.get_width() / 2, value),
+            xytext=(0, 4),
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
+
 
 def create_training_figure(training: pd.DataFrame) -> None:
     """Trace les récompenses et epsilon pendant l'entraînement."""
-
     figure, first_axis = plt.subplots(figsize=(10, 6))
 
     first_axis.plot(
         training["episode"],
         training["training_reward"],
         marker="o",
+        markersize=4,
         label="Entraînement",
     )
-
     first_axis.plot(
         training["episode"],
         training["validation_reward"],
         marker="s",
+        markersize=4,
         label="Validation",
     )
 
@@ -36,7 +59,6 @@ def create_training_figure(training: pd.DataFrame) -> None:
     first_axis.legend(loc="upper left")
 
     second_axis = first_axis.twinx()
-
     second_axis.plot(
         training["episode"],
         training["epsilon"],
@@ -44,91 +66,87 @@ def create_training_figure(training: pd.DataFrame) -> None:
         linestyle="--",
         label="Epsilon",
     )
-
     second_axis.set_ylabel("Epsilon")
     second_axis.set_ylim(0, 1.05)
 
-    plt.title("Évolution de l’apprentissage du DQN")
+    figure.suptitle("Évolution de l’apprentissage du DQN")
     figure.tight_layout()
-
     figure.savefig(
         FIGURES_DIRECTORY / "training_progress.png",
         dpi=200,
+        bbox_inches="tight",
     )
-
     plt.close(figure)
 
 
 def create_evaluation_figure(evaluation: pd.DataFrame) -> None:
     """Compare les politiques sur les principales métriques."""
-
-    labels = {
-        "idle": "Batterie inactive",
-        "rule_based": "Règles simples",
-        "dqn": "DQN",
-    }
-
     evaluation = evaluation.copy()
+    evaluation["strategy"] = evaluation["policy"].map(POLICY_LABELS)
 
-    evaluation["strategy"] = evaluation["policy"].map(labels)
+    metrics = [
+        (
+            "grid_import_kwh",
+            "Importation du réseau",
+            "Énergie (kWh)",
+            2,
+        ),
+        (
+            "unmet_demand_kwh",
+            "Demande non satisfaite",
+            "Énergie (kWh)",
+            2,
+        ),
+        (
+            "autonomy_rate_percent",
+            "Autonomie énergétique",
+            "Pourcentage (%)",
+            2,
+        ),
+        (
+            "equivalent_battery_cycles",
+            "Cycles équivalents de batterie",
+            "Nombre de cycles",
+            2,
+        ),
+    ]
 
     figure, axes = plt.subplots(
-        1,
-        3,
-        figsize=(15, 5),
+        2,
+        2,
+        figsize=(14, 10),
     )
 
-    axes[0].bar(
-        evaluation["strategy"],
-        evaluation["grid_import_kwh"],
-        color=["gray", "orange", "royalblue"],
-    )
-    axes[0].set_title("Importation du réseau")
-    axes[0].set_ylabel("Énergie (kWh)")
-
-    axes[1].bar(
-        evaluation["strategy"],
-        evaluation["unmet_demand_kwh"],
-        color=["gray", "orange", "royalblue"],
-    )
-    axes[1].set_title("Demande non satisfaite")
-    axes[1].set_ylabel("Énergie (kWh)")
-
-    axes[2].bar(
-        evaluation["strategy"],
-        evaluation["autonomy_rate_percent"],
-        color=["gray", "orange", "royalblue"],
-    )
-    axes[2].set_title("Autonomie énergétique")
-    axes[2].set_ylabel("Pourcentage (%)")
-
-    for axis in axes:
-        axis.tick_params(
-            axis="x",
-            labelrotation=20,
+    for axis, (column, title, ylabel, decimals) in zip(
+        axes.flat,
+        metrics,
+    ):
+        axis.bar(
+            evaluation["strategy"],
+            evaluation[column],
+            color=POLICY_COLORS,
         )
-        axis.grid(
-            axis="y",
-            alpha=0.3,
-        )
+        axis.set_title(title)
+        axis.set_ylabel(ylabel)
+        axis.tick_params(axis="x", labelrotation=10)
+        axis.grid(axis="y", alpha=0.3)
+        add_value_labels(axis, decimals)
 
     figure.suptitle(
-        "Comparaison des stratégies sur les données de test"
+        "Comparaison des stratégies sur les données de test",
+        fontsize=15,
     )
-
     figure.tight_layout()
-
     figure.savefig(
         FIGURES_DIRECTORY / "policy_comparison.png",
         dpi=200,
+        bbox_inches="tight",
     )
-
     plt.close(figure)
 
 
 def main() -> None:
     """Charge les résultats et produit les deux graphiques."""
-
     if not TRAINING_PATH.exists():
         raise FileNotFoundError(
             f"Fichier introuvable : {TRAINING_PATH}"
@@ -154,7 +172,6 @@ def main() -> None:
         "Graphique d'entraînement :",
         FIGURES_DIRECTORY / "training_progress.png",
     )
-
     print(
         "Graphique de comparaison :",
         FIGURES_DIRECTORY / "policy_comparison.png",

@@ -55,11 +55,15 @@ def test_training_episode_returns_expected_metrics():
         "grid_import",
         "unmet_demand",
         "battery_discharge",
+        "battery_throughput",
+        "battery_degradation_cost",
         "final_soc",
     }
 
     assert len(agent.memory) == 48
     assert results["average_loss"] >= 0
+    assert results["battery_throughput"] >= 0
+    assert results["battery_degradation_cost"] >= 0
     assert 0 <= results["final_soc"] <= 1
 
 

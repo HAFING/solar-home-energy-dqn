@@ -1,5 +1,7 @@
+import gymnasium as gym
 import pandas as pd
 import pytest
+from gymnasium.utils.env_checker import check_env
 
 from src.environment.energy_environment import (
     EnergyEnvironment,
@@ -17,24 +19,96 @@ def sample_data():
     )
 
 
-def test_reset_returns_state(sample_data):
-    env = EnergyEnvironment(sample_data)
+def test_environment_inherits_from_gymnasium(sample_data):
+    environment = EnergyEnvironment(sample_data)
 
-    state = env.reset()
+    assert isinstance(environment, gym.Env)
 
-    assert len(state) == 6
+
+def test_environment_follows_gymnasium_api(sample_data):
+    environment = EnergyEnvironment(sample_data)
+
+    check_env(
+        environment,
+        skip_render_check=True,
+    )
+
+
+def test_action_space(sample_data):
+    environment = EnergyEnvironment(sample_data)
+
+    assert isinstance(
+        environment.action_space,
+        gym.spaces.Discrete,
+    )
+    assert environment.action_space.n == 3
+
+
+def test_observation_space(sample_data):
+    environment = EnergyEnvironment(sample_data)
+
+    observation, _ = environment.reset()
+
+    assert isinstance(
+        environment.observation_space,
+        gym.spaces.Box,
+    )
+    assert environment.observation_space.shape == (6,)
+    assert environment.observation_space.contains(observation)
+
+
+def test_reset_returns_observation_and_info(sample_data):
+    environment = EnergyEnvironment(sample_data)
+
+    observation, info = environment.reset()
+
+    assert len(observation) == 6
+    assert isinstance(info, dict)
 
 
 def test_initial_soc(sample_data):
-    env = EnergyEnvironment(sample_data)
+    environment = EnergyEnvironment(sample_data)
 
-    env.reset()
+    environment.reset()
 
-    assert env.soc == 0.5
+    assert environment.soc == 0.5
+
+
+def test_custom_initial_soc(sample_data):
+    environment = EnergyEnvironment(
+        sample_data,
+        initial_soc=0.75,
+    )
+
+    observation, _ = environment.reset()
+
+    assert environment.soc == 0.75
+    assert observation[2] == pytest.approx(0.75)
+
+
+def test_reset_option_changes_initial_soc(sample_data):
+    environment = EnergyEnvironment(sample_data)
+
+    observation, _ = environment.reset(
+        options={
+            "initial_soc": 0.25,
+        }
+    )
+
+    assert environment.soc == 0.25
+    assert observation[2] == pytest.approx(0.25)
+
+
+def test_invalid_initial_soc(sample_data):
+    with pytest.raises(ValueError):
+        EnergyEnvironment(
+            sample_data,
+            initial_soc=1.5,
+        )
 
 
 def test_charge_increases_soc():
-    df = pd.DataFrame(
+    data = pd.DataFrame(
         {
             "pv_production": [5],
             "consumption": [2],
@@ -42,19 +116,18 @@ def test_charge_increases_soc():
         }
     )
 
-    env = EnergyEnvironment(df)
+    environment = EnergyEnvironment(data)
+    environment.reset()
 
-    env.reset()
+    old_soc = environment.soc
 
-    old_soc = env.soc
+    environment.step(environment.CHARGE)
 
-    env.step(env.CHARGE)
-
-    assert env.soc > old_soc
+    assert environment.soc > old_soc
 
 
 def test_discharge_decreases_soc():
-    df = pd.DataFrame(
+    data = pd.DataFrame(
         {
             "pv_production": [1],
             "consumption": [4],
@@ -62,19 +135,18 @@ def test_discharge_decreases_soc():
         }
     )
 
-    env = EnergyEnvironment(df)
+    environment = EnergyEnvironment(data)
+    environment.reset()
 
-    env.reset()
+    old_soc = environment.soc
 
-    old_soc = env.soc
+    environment.step(environment.DISCHARGE)
 
-    env.step(env.DISCHARGE)
-
-    assert env.soc < old_soc
+    assert environment.soc < old_soc
 
 
 def test_soc_never_above_one():
-    df = pd.DataFrame(
+    data = pd.DataFrame(
         {
             "pv_production": [20] * 20,
             "consumption": [0] * 20,
@@ -82,23 +154,28 @@ def test_soc_never_above_one():
         }
     )
 
-    env = EnergyEnvironment(df)
+    environment = EnergyEnvironment(data)
+    environment.reset()
 
-    env.reset()
-
-    for _ in range(len(df)):
-        _, _, done, _ = env.step(
-            env.CHARGE
+    for _ in range(len(data)):
+        (
+            _,
+            _,
+            terminated,
+            truncated,
+            _,
+        ) = environment.step(
+            environment.CHARGE
         )
 
-        if done:
+        if terminated or truncated:
             break
 
-    assert env.soc <= 1.0
+    assert environment.soc <= 1.0
 
 
 def test_soc_never_below_zero():
-    df = pd.DataFrame(
+    data = pd.DataFrame(
         {
             "pv_production": [0] * 20,
             "consumption": [20] * 20,
@@ -106,33 +183,36 @@ def test_soc_never_below_zero():
         }
     )
 
-    env = EnergyEnvironment(df)
+    environment = EnergyEnvironment(data)
+    environment.reset()
 
-    env.reset()
-
-    for _ in range(len(df)):
-        _, _, done, _ = env.step(
-            env.DISCHARGE
+    for _ in range(len(data)):
+        (
+            _,
+            _,
+            terminated,
+            truncated,
+            _,
+        ) = environment.step(
+            environment.DISCHARGE
         )
 
-        if done:
+        if terminated or truncated:
             break
 
-    assert env.soc >= 0.0
+    assert environment.soc >= 0.0
 
 
 def test_invalid_action(sample_data):
-    env = EnergyEnvironment(sample_data)
-
-    env.reset()
+    environment = EnergyEnvironment(sample_data)
+    environment.reset()
 
     with pytest.raises(ValueError):
-        env.step(99)
+        environment.step(99)
 
 
 def test_grid_outage_creates_unmet_demand():
-
-    df = pd.DataFrame(
+    data = pd.DataFrame(
         {
             "pv_production": [0],
             "consumption": [10],
@@ -140,20 +220,18 @@ def test_grid_outage_creates_unmet_demand():
         }
     )
 
-    env = EnergyEnvironment(df)
+    environment = EnergyEnvironment(data)
+    environment.reset()
 
-    env.reset()
-
-    _, _, _, info = env.step(
-        env.IDLE
+    _, _, _, _, info = environment.step(
+        environment.IDLE
     )
 
     assert info["unmet_demand"] > 0
 
 
 def test_grid_available_imports_energy():
-
-    df = pd.DataFrame(
+    data = pd.DataFrame(
         {
             "pv_production": [0],
             "consumption": [10],
@@ -161,20 +239,18 @@ def test_grid_available_imports_energy():
         }
     )
 
-    env = EnergyEnvironment(df)
+    environment = EnergyEnvironment(data)
+    environment.reset()
 
-    env.reset()
-
-    _, _, _, info = env.step(
-        env.IDLE
+    _, _, _, _, info = environment.step(
+        environment.IDLE
     )
 
     assert info["grid_import"] > 0
 
 
-def test_done_flag():
-
-    df = pd.DataFrame(
+def test_termination_flag():
+    data = pd.DataFrame(
         {
             "pv_production": [5],
             "consumption": [2],
@@ -182,12 +258,163 @@ def test_done_flag():
         }
     )
 
-    env = EnergyEnvironment(df)
+    environment = EnergyEnvironment(data)
+    environment.reset()
 
-    env.reset()
-
-    _, _, done, _ = env.step(
-        env.IDLE
+    (
+        _,
+        _,
+        terminated,
+        truncated,
+        _,
+    ) = environment.step(
+        environment.IDLE
     )
 
-    assert done is True
+    assert terminated is True
+    assert truncated is False
+
+def test_external_normalization_scales_are_reused():
+    test_data = pd.DataFrame(
+        {
+            "pv_production": [1.0],
+            "consumption": [0.5],
+            "grid_available": [1],
+        }
+    )
+
+    environment = EnergyEnvironment(
+        test_data,
+        pv_scale=5.0,
+        consumption_scale=2.5,
+    )
+
+    observation, _ = environment.reset()
+
+    assert environment.pv_scale == pytest.approx(5.0)
+    assert environment.consumption_scale == pytest.approx(2.5)
+
+    assert observation[0] == pytest.approx(
+        1.0 / 5.0
+    )
+
+    assert observation[1] == pytest.approx(
+        0.5 / 2.5
+    )
+
+def test_negative_degradation_weight_is_rejected(
+    sample_data,
+):
+    with pytest.raises(ValueError):
+        EnergyEnvironment(
+            sample_data,
+            battery_degradation_weight=-0.01,
+        )
+
+
+def test_battery_can_reach_full_charge():
+    data = pd.DataFrame(
+        {
+            "pv_production": [10.0],
+            "consumption": [0.0],
+            "grid_available": [1],
+        }
+    )
+
+    environment = EnergyEnvironment(
+        data,
+        initial_soc=0.99,
+    )
+
+    environment.reset()
+    environment.step(
+        environment.CHARGE
+    )
+
+    assert environment.soc == pytest.approx(
+        1.0
+    )
+
+
+def test_throughput_counts_stored_energy():
+    data = pd.DataFrame(
+        {
+            "pv_production": [5.0],
+            "consumption": [0.0],
+            "grid_available": [1],
+        }
+    )
+
+    environment = EnergyEnvironment(data)
+    environment.reset()
+
+    _, _, _, _, info = environment.step(
+        environment.CHARGE
+    )
+
+    assert info[
+        "battery_throughput"
+    ] == pytest.approx(
+        info["battery_energy_stored"]
+        + info["battery_discharge"]
+    )
+
+    assert info[
+        "battery_throughput"
+    ] > 0
+
+
+def test_degradation_reduces_reward():
+    data = pd.DataFrame(
+        {
+            "pv_production": [5.0],
+            "consumption": [0.5],
+            "grid_available": [1],
+        }
+    )
+
+    environment_without_degradation = (
+        EnergyEnvironment(
+            data,
+            battery_degradation_weight=0.0,
+        )
+    )
+
+    environment_with_degradation = (
+        EnergyEnvironment(
+            data,
+            battery_degradation_weight=0.10,
+        )
+    )
+
+    environment_without_degradation.reset()
+    environment_with_degradation.reset()
+
+    (
+        _,
+        reward_without_degradation,
+        _,
+        _,
+        _,
+    ) = environment_without_degradation.step(
+        environment_without_degradation.CHARGE
+    )
+
+    (
+        _,
+        reward_with_degradation,
+        _,
+        _,
+        info,
+    ) = environment_with_degradation.step(
+        environment_with_degradation.CHARGE
+    )
+
+    assert info[
+        "battery_degradation_cost"
+    ] > 0
+
+    assert (
+        reward_with_degradation
+        < reward_without_degradation
+    )
