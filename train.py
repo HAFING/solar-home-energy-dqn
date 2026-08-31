@@ -11,6 +11,7 @@ import torch
 from src.agent import DQNAgent
 from src.environment.energy_environment import EnergyEnvironment
 from src.integration_data import (
+    compute_normalization_scales,
     load_environment_data,
     split_environment_data,
 )
@@ -48,11 +49,18 @@ def run_training_episode(
     total_battery_discharge = 0.0
 
     while not done:
-        action = agent.act(state, explore=True)
-
-        next_state, reward, terminated, truncated, info = (
-         environment.step(action)
+        action = agent.act(
+            state,
+            explore=True,
         )
+
+        (
+            next_state,
+            reward,
+            terminated,
+            truncated,
+            info,
+        ) = environment.step(action)
 
         done = terminated or truncated
 
@@ -73,7 +81,9 @@ def run_training_episode(
         total_reward += reward
         total_grid_import += info["grid_import"]
         total_unmet_demand += info["unmet_demand"]
-        total_battery_discharge += info["battery_discharge"]
+        total_battery_discharge += info[
+            "battery_discharge"
+        ]
 
         state = next_state
 
@@ -108,18 +118,27 @@ def evaluate_agent(
     total_battery_discharge = 0.0
 
     while not done:
-        action = agent.act(state, explore=False)
-
-        next_state, reward, terminated, truncated, info = (
-            environment.step(action)
+        action = agent.act(
+            state,
+            explore=False,
         )
+
+        (
+            next_state,
+            reward,
+            terminated,
+            truncated,
+            info,
+        ) = environment.step(action)
 
         done = terminated or truncated
 
         total_reward += reward
         total_grid_import += info["grid_import"]
         total_unmet_demand += info["unmet_demand"]
-        total_battery_discharge += info["battery_discharge"]
+        total_battery_discharge += info[
+            "battery_discharge"
+        ]
 
         state = next_state
 
@@ -132,10 +151,16 @@ def evaluate_agent(
     }
 
 
-def save_metrics(metrics: list[dict], output_path: Path) -> None:
-    """Enregistre les métriques d'entraînement dans un fichier CSV."""
+def save_metrics(
+    metrics: list[dict],
+    output_path: Path,
+) -> None:
+    """Enregistre les métriques d'entraînement dans un CSV."""
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     if not metrics:
         return
@@ -163,18 +188,41 @@ def train(
     """Entraîne le DQN et sauvegarde le meilleur modèle."""
 
     if episodes <= 0:
-        raise ValueError("Le nombre d'épisodes doit être positif.")
+        raise ValueError(
+            "Le nombre d'épisodes doit être positif."
+        )
 
     set_random_seeds(seed)
 
-    complete_data = load_environment_data(seed=seed)
+    complete_data = load_environment_data(
+        seed=seed
+    )
 
-    train_data, validation_data, _ = split_environment_data(
+    (
+        train_data,
+        validation_data,
+        _,
+    ) = split_environment_data(
         complete_data
     )
 
-    training_environment = EnergyEnvironment(train_data)
-    validation_environment = EnergyEnvironment(validation_data)
+    pv_scale, consumption_scale = (
+        compute_normalization_scales(
+            train_data
+        )
+    )
+
+    training_environment = EnergyEnvironment(
+        train_data,
+        pv_scale=pv_scale,
+        consumption_scale=consumption_scale,
+    )
+
+    validation_environment = EnergyEnvironment(
+        validation_data,
+        pv_scale=pv_scale,
+        consumption_scale=consumption_scale,
+    )
 
     agent = DQNAgent(
         state_size=6,
@@ -190,17 +238,43 @@ def train(
         target_update_freq=250,
     )
 
-    print("Appareil utilisé :", agent.device)
-    print("Épisodes :", episodes)
-    print("Heures d'entraînement :", len(train_data))
-    print("Heures de validation :", len(validation_data))
+    print(
+        "Appareil utilisé :",
+        agent.device,
+    )
+    print(
+        "Épisodes :",
+        episodes,
+    )
+    print(
+        "Heures d'entraînement :",
+        len(train_data),
+    )
+    print(
+        "Heures de validation :",
+        len(validation_data),
+    )
+    print(
+        "Échelle solaire issue de train :",
+        f"{pv_scale:.6f}",
+    )
+    print(
+        "Échelle consommation issue de train :",
+        f"{consumption_scale:.6f}",
+    )
 
-    model_path.parent.mkdir(parents=True, exist_ok=True)
+    model_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     best_validation_reward = float("-inf")
     history = []
 
-    for episode in range(1, episodes + 1):
+    for episode in range(
+        1,
+        episodes + 1,
+    ):
         training_results = run_training_episode(
             training_environment,
             agent,
@@ -225,7 +299,10 @@ def train(
                 training_results["average_loss"],
                 6,
             ),
-            "epsilon": round(agent.epsilon, 6),
+            "epsilon": round(
+                agent.epsilon,
+                6,
+            ),
             "training_grid_import": round(
                 training_results["grid_import"],
                 6,
@@ -243,7 +320,9 @@ def train(
                 6,
             ),
             "validation_battery_discharge": round(
-                validation_results["battery_discharge"],
+                validation_results[
+                    "battery_discharge"
+                ],
                 6,
             ),
             "validation_final_soc": round(
@@ -265,8 +344,14 @@ def train(
             f"{validation_results['unmet_demand']:.2f}"
         )
 
-        if validation_results["reward"] > best_validation_reward:
-            best_validation_reward = validation_results["reward"]
+        if (
+            validation_results["reward"]
+            > best_validation_reward
+        ):
+            best_validation_reward = (
+                validation_results["reward"]
+            )
+
             agent.save(model_path)
 
             print(
@@ -274,15 +359,26 @@ def train(
                 model_path,
             )
 
-        save_metrics(history, metrics_path)
+        save_metrics(
+            history,
+            metrics_path,
+        )
 
-    print("Entraînement terminé.")
+    print(
+        "Entraînement terminé."
+    )
     print(
         "Meilleure récompense de validation :",
         f"{best_validation_reward:.2f}",
     )
-    print("Modèle :", model_path)
-    print("Métriques :", metrics_path)
+    print(
+        "Modèle :",
+        model_path,
+    )
+    print(
+        "Métriques :",
+        metrics_path,
+    )
 
     return history
 
@@ -291,7 +387,9 @@ def parse_arguments() -> argparse.Namespace:
     """Lit les paramètres fournis dans le terminal."""
 
     parser = argparse.ArgumentParser(
-        description="Entraîner le DQN de gestion énergétique."
+        description=(
+            "Entraîner le DQN de gestion énergétique."
+        )
     )
 
     parser.add_argument(

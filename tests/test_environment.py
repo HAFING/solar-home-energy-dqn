@@ -273,3 +273,31 @@ def test_termination_flag():
 
     assert terminated is True
     assert truncated is False
+
+def test_external_normalization_scales_are_reused():
+    test_data = pd.DataFrame(
+        {
+            "pv_production": [1.0],
+            "consumption": [0.5],
+            "grid_available": [1],
+        }
+    )
+
+    environment = EnergyEnvironment(
+        test_data,
+        pv_scale=5.0,
+        consumption_scale=2.5,
+    )
+
+    observation, _ = environment.reset()
+
+    assert environment.pv_scale == pytest.approx(5.0)
+    assert environment.consumption_scale == pytest.approx(2.5)
+
+    assert observation[0] == pytest.approx(
+        1.0 / 5.0
+    )
+
+    assert observation[1] == pytest.approx(
+        0.5 / 2.5
+    )

@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from src.integration_data import (
+    compute_normalization_scales,
     load_environment_data,
     simulate_grid_availability,
     split_environment_data,
@@ -109,3 +110,60 @@ def test_invalid_outage_probability_is_rejected():
             number_of_hours=100,
             outage_start_probability=1.5,
         )
+
+def test_normalization_scales_use_training_data():
+    training_data = pd.DataFrame(
+        {
+            "pv_production": [
+                0.0,
+                2.5,
+                5.0,
+            ],
+            "consumption": [
+                0.5,
+                1.5,
+                2.5,
+            ],
+        }
+    )
+
+    pv_scale, consumption_scale = (
+        compute_normalization_scales(training_data)
+    )
+
+    assert pv_scale == pytest.approx(5.0)
+    assert consumption_scale == pytest.approx(2.5)
+
+
+def test_normalization_scales_have_safe_minimum():
+    training_data = pd.DataFrame(
+        {
+            "pv_production": [
+                0.0,
+                0.2,
+            ],
+            "consumption": [
+                0.1,
+                0.5,
+            ],
+        }
+    )
+
+    pv_scale, consumption_scale = (
+        compute_normalization_scales(training_data)
+    )
+
+    assert pv_scale == pytest.approx(1.0)
+    assert consumption_scale == pytest.approx(1.0)
+
+
+def test_empty_training_data_is_rejected():
+    training_data = pd.DataFrame(
+        columns=[
+            "pv_production",
+            "consumption",
+        ]
+    )
+
+    with pytest.raises(ValueError):
+        compute_normalization_scales(training_data)
