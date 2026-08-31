@@ -301,3 +301,120 @@ def test_external_normalization_scales_are_reused():
     assert observation[1] == pytest.approx(
         0.5 / 2.5
     )
+
+def test_negative_degradation_weight_is_rejected(
+    sample_data,
+):
+    with pytest.raises(ValueError):
+        EnergyEnvironment(
+            sample_data,
+            battery_degradation_weight=-0.01,
+        )
+
+
+def test_battery_can_reach_full_charge():
+    data = pd.DataFrame(
+        {
+            "pv_production": [10.0],
+            "consumption": [0.0],
+            "grid_available": [1],
+        }
+    )
+
+    environment = EnergyEnvironment(
+        data,
+        initial_soc=0.99,
+    )
+
+    environment.reset()
+    environment.step(
+        environment.CHARGE
+    )
+
+    assert environment.soc == pytest.approx(
+        1.0
+    )
+
+
+def test_throughput_counts_stored_energy():
+    data = pd.DataFrame(
+        {
+            "pv_production": [5.0],
+            "consumption": [0.0],
+            "grid_available": [1],
+        }
+    )
+
+    environment = EnergyEnvironment(data)
+    environment.reset()
+
+    _, _, _, _, info = environment.step(
+        environment.CHARGE
+    )
+
+    assert info[
+        "battery_throughput"
+    ] == pytest.approx(
+        info["battery_energy_stored"]
+        + info["battery_discharge"]
+    )
+
+    assert info[
+        "battery_throughput"
+    ] > 0
+
+
+def test_degradation_reduces_reward():
+    data = pd.DataFrame(
+        {
+            "pv_production": [5.0],
+            "consumption": [0.5],
+            "grid_available": [1],
+        }
+    )
+
+    environment_without_degradation = (
+        EnergyEnvironment(
+            data,
+            battery_degradation_weight=0.0,
+        )
+    )
+
+    environment_with_degradation = (
+        EnergyEnvironment(
+            data,
+            battery_degradation_weight=0.10,
+        )
+    )
+
+    environment_without_degradation.reset()
+    environment_with_degradation.reset()
+
+    (
+        _,
+        reward_without_degradation,
+        _,
+        _,
+        _,
+    ) = environment_without_degradation.step(
+        environment_without_degradation.CHARGE
+    )
+
+    (
+        _,
+        reward_with_degradation,
+        _,
+        _,
+        info,
+    ) = environment_with_degradation.step(
+        environment_with_degradation.CHARGE
+    )
+
+    assert info[
+        "battery_degradation_cost"
+    ] > 0
+
+    assert (
+        reward_with_degradation
+        < reward_without_degradation
+    )

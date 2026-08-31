@@ -38,6 +38,7 @@ class EnergyEnvironment(gym.Env):
     INITIAL_SOC = 0.50
     MAX_BATTERY_POWER = 2.0
     BATTERY_EFFICIENCY = 0.95
+    DEFAULT_DEGRADATION_WEIGHT = 0.01
 
     def __init__(
         self,
@@ -45,6 +46,9 @@ class EnergyEnvironment(gym.Env):
         pv_scale: float | None = None,
         consumption_scale: float | None = None,
         initial_soc: float = INITIAL_SOC,
+        battery_degradation_weight: float = (
+            DEFAULT_DEGRADATION_WEIGHT
+        ),
     ):
         super().__init__()
 
@@ -54,17 +58,22 @@ class EnergyEnvironment(gym.Env):
             "grid_available",
         }
 
-        missing_columns = required_columns.difference(data.columns)
+        missing_columns = required_columns.difference(
+            data.columns
+        )
 
         if missing_columns:
             raise ValueError(
                 "Colonnes manquantes : "
-                + ", ".join(sorted(missing_columns))
+                + ", ".join(
+                    sorted(missing_columns)
+                )
             )
 
         if len(data) == 0:
             raise ValueError(
-                "L'environnement nécessite au moins une observation."
+                "L'environnement nécessite au moins "
+                "une observation."
             )
 
         if not 0 <= initial_soc <= 1:
@@ -72,16 +81,46 @@ class EnergyEnvironment(gym.Env):
                 "initial_soc doit être compris entre 0 et 1."
             )
 
-        self.data = data.reset_index(drop=True).copy()
-        self.initial_soc = float(initial_soc)
+        if (
+            not np.isfinite(
+                battery_degradation_weight
+            )
+            or battery_degradation_weight < 0
+        ):
+            raise ValueError(
+                "battery_degradation_weight doit être "
+                "un nombre positif ou nul."
+            )
+
+        self.data = (
+            data.reset_index(
+                drop=True
+            ).copy()
+        )
+
+        self.initial_soc = float(
+            initial_soc
+        )
+
+        self.battery_degradation_weight = float(
+            battery_degradation_weight
+        )
 
         inferred_pv_scale = max(
-            float(self.data["pv_production"].max()),
+            float(
+                self.data[
+                    "pv_production"
+                ].max()
+            ),
             1.0,
         )
 
         inferred_consumption_scale = max(
-            float(self.data["consumption"].max()),
+            float(
+                self.data[
+                    "consumption"
+                ].max()
+            ),
             1.0,
         )
 
@@ -104,22 +143,40 @@ class EnergyEnvironment(gym.Env):
 
         if self.consumption_scale <= 0:
             raise ValueError(
-                "consumption_scale doit être strictement positif."
+                "consumption_scale doit être "
+                "strictement positif."
             )
 
-        # Alias conservés pour faciliter la lecture et la compatibilité.
         self.pv_max = self.pv_scale
-        self.consumption_max = self.consumption_scale
+        self.consumption_max = (
+            self.consumption_scale
+        )
 
-        self.action_space = spaces.Discrete(3)
+        self.action_space = spaces.Discrete(
+            3
+        )
 
         self.observation_space = spaces.Box(
             low=np.array(
-                [0.0, 0.0, 0.0, 0.0, -1.0, -1.0],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    -1.0,
+                    -1.0,
+                ],
                 dtype=np.float32,
             ),
             high=np.array(
-                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                ],
                 dtype=np.float32,
             ),
             dtype=np.float32,
@@ -135,19 +192,27 @@ class EnergyEnvironment(gym.Env):
         seed: int | None = None,
         options: dict | None = None,
     ):
-        """Réinitialise l'épisode et renvoie l'état initial."""
+        """Réinitialise l'épisode."""
 
-        super().reset(seed=seed)
+        super().reset(
+            seed=seed
+        )
 
         self.current_step = 0
         reset_soc = self.initial_soc
 
-        if options is not None and "initial_soc" in options:
-            reset_soc = float(options["initial_soc"])
+        if (
+            options is not None
+            and "initial_soc" in options
+        ):
+            reset_soc = float(
+                options["initial_soc"]
+            )
 
             if not 0 <= reset_soc <= 1:
                 raise ValueError(
-                    "Le SOC initial doit être compris entre 0 et 1."
+                    "Le SOC initial doit être "
+                    "compris entre 0 et 1."
                 )
 
         self.soc = reset_soc
@@ -158,13 +223,23 @@ class EnergyEnvironment(gym.Env):
         return observation, info
 
     def _get_state(self) -> np.ndarray:
-        """Construit l'observation correspondant à l'heure actuelle."""
+        """Construit l'observation de l'heure actuelle."""
 
-        row = self.data.iloc[self.current_step]
+        row = self.data.iloc[
+            self.current_step
+        ]
 
-        pv = float(row["pv_production"])
-        consumption = float(row["consumption"])
-        grid_available = float(row["grid_available"])
+        pv = float(
+            row["pv_production"]
+        )
+
+        consumption = float(
+            row["consumption"]
+        )
+
+        grid_available = float(
+            row["grid_available"]
+        )
 
         pv_normalized = np.clip(
             pv / self.pv_scale,
@@ -173,13 +248,17 @@ class EnergyEnvironment(gym.Env):
         )
 
         consumption_normalized = np.clip(
-            consumption / self.consumption_scale,
+            consumption
+            / self.consumption_scale,
             0.0,
             1.0,
         )
 
         if "timestamp" in self.data.columns:
-            timestamp = row["timestamp"]
+            timestamp = row[
+                "timestamp"
+            ]
+
             hour = int(
                 getattr(
                     timestamp,
@@ -188,14 +267,23 @@ class EnergyEnvironment(gym.Env):
                 )
             )
         else:
-            hour = self.current_step % 24
+            hour = (
+                self.current_step
+                % 24
+            )
 
         sin_hour = math.sin(
-            2 * math.pi * hour / 24
+            2
+            * math.pi
+            * hour
+            / 24
         )
 
         cos_hour = math.cos(
-            2 * math.pi * hour / 24
+            2
+            * math.pi
+            * hour
+            / 24
         )
 
         return np.array(
@@ -211,22 +299,36 @@ class EnergyEnvironment(gym.Env):
         )
 
     def step(self, action):
-        """Applique une action et avance la simulation d'une heure."""
+        """Applique une action et avance d'une heure."""
 
-        if not self.action_space.contains(action):
+        if not self.action_space.contains(
+            action
+        ):
             raise ValueError(
                 f"Action invalide : {action}"
             )
 
         action = int(action)
-        row = self.data.iloc[self.current_step]
 
-        pv = float(row["pv_production"])
-        consumption = float(row["consumption"])
-        grid_available = int(row["grid_available"])
+        row = self.data.iloc[
+            self.current_step
+        ]
+
+        pv = float(
+            row["pv_production"]
+        )
+
+        consumption = float(
+            row["consumption"]
+        )
+
+        grid_available = int(
+            row["grid_available"]
+        )
 
         battery_energy = (
-            self.soc * self.BATTERY_CAPACITY
+            self.soc
+            * self.BATTERY_CAPACITY
         )
 
         solar_used = min(
@@ -245,35 +347,53 @@ class EnergyEnvironment(gym.Env):
         )
 
         battery_charge = 0.0
+        battery_energy_stored = 0.0
         battery_discharge = 0.0
         grid_import = 0.0
         unmet_demand = 0.0
 
-        if action == self.CHARGE and surplus > 0:
+        if (
+            action == self.CHARGE
+            and surplus > 0
+        ):
             available_capacity = (
                 self.BATTERY_CAPACITY
                 - battery_energy
             )
 
+            maximum_charge_input = (
+                available_capacity
+                / self.BATTERY_EFFICIENCY
+            )
+
             battery_charge = min(
                 surplus,
                 self.MAX_BATTERY_POWER,
-                available_capacity,
+                maximum_charge_input,
             )
 
-            battery_energy += (
+            battery_energy_stored = (
                 battery_charge
                 * self.BATTERY_EFFICIENCY
             )
 
-        if action == self.DISCHARGE and deficit > 0:
+            battery_energy += (
+                battery_energy_stored
+            )
+
+        if (
+            action == self.DISCHARGE
+            and deficit > 0
+        ):
             battery_discharge = min(
                 deficit,
                 self.MAX_BATTERY_POWER,
                 battery_energy,
             )
 
-            battery_energy -= battery_discharge
+            battery_energy -= (
+                battery_discharge
+            )
 
             deficit -= (
                 battery_discharge
@@ -286,24 +406,33 @@ class EnergyEnvironment(gym.Env):
             else:
                 unmet_demand = deficit
 
-        self.soc = (
-            battery_energy
-            / self.BATTERY_CAPACITY
-        )
-
         self.soc = float(
             np.clip(
-                self.soc,
+                battery_energy
+                / self.BATTERY_CAPACITY,
                 0.0,
                 1.0,
             )
         )
 
+        battery_throughput = (
+            battery_energy_stored
+            + battery_discharge
+        )
+
+        battery_degradation_cost = (
+            self.battery_degradation_weight
+            * battery_throughput
+        )
+
         reward = (
             solar_used
             - grid_import
-            - (5.0 * unmet_demand)
-            - (0.01 * battery_discharge)
+            - (
+                5.0
+                * unmet_demand
+            )
+            - battery_degradation_cost
         )
 
         self.current_step += 1
@@ -321,7 +450,9 @@ class EnergyEnvironment(gym.Env):
                 dtype=np.float32,
             )
         else:
-            next_state = self._get_state()
+            next_state = (
+                self._get_state()
+            )
 
         info = {
             "pv_production": pv,
@@ -329,7 +460,18 @@ class EnergyEnvironment(gym.Env):
             "soc": self.soc,
             "grid_available": grid_available,
             "battery_charge": battery_charge,
-            "battery_discharge": battery_discharge,
+            "battery_energy_stored": (
+                battery_energy_stored
+            ),
+            "battery_discharge": (
+                battery_discharge
+            ),
+            "battery_throughput": (
+                battery_throughput
+            ),
+            "battery_degradation_cost": (
+                battery_degradation_cost
+            ),
             "grid_import": grid_import,
             "unmet_demand": unmet_demand,
             "solar_used": solar_used,
@@ -344,11 +486,11 @@ class EnergyEnvironment(gym.Env):
         )
 
     def render(self):
-        """Aucun rendu graphique natif n'est nécessaire."""
+        """Aucun rendu graphique natif."""
 
         return None
 
     def close(self):
-        """Libère les éventuelles ressources de l'environnement."""
+        """Libère les éventuelles ressources."""
 
         return None

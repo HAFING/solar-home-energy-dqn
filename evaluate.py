@@ -85,6 +85,8 @@ def evaluate_policy(
     total_unmet_demand = 0.0
     total_battery_charge = 0.0
     total_battery_discharge = 0.0
+    total_battery_throughput = 0.0
+    total_battery_degradation_cost = 0.0
 
     action_counts = {
         EnergyEnvironment.IDLE: 0,
@@ -117,11 +119,16 @@ def evaluate_policy(
         total_unmet_demand += info[
             "unmet_demand"
         ]
-        total_battery_charge += info[
-            "battery_charge"
-        ]
         total_battery_discharge += info[
             "battery_discharge"
+        ]
+
+        total_battery_throughput += info[
+            "battery_throughput"
+        ]
+
+        total_battery_degradation_cost += info[
+            "battery_degradation_cost"
         ]
 
         state = next_state
@@ -158,8 +165,11 @@ def evaluate_policy(
     )
 
     equivalent_battery_cycles = (
-        total_battery_discharge
-        / environment.BATTERY_CAPACITY
+        total_battery_throughput
+        / (
+            2.0
+            * environment.BATTERY_CAPACITY
+        )
     )
 
     outage_hours = int(
@@ -191,6 +201,14 @@ def evaluate_policy(
         ),
         "battery_discharge_kwh": round(
             total_battery_discharge,
+            6,
+        ),
+        "battery_throughput_kwh": round(
+            total_battery_throughput,
+            6,
+        ),
+        "battery_degradation_cost": round(
+            total_battery_degradation_cost,
             6,
         ),
         "equivalent_battery_cycles": round(

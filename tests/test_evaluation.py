@@ -78,3 +78,24 @@ def test_autonomy_excludes_unmet_demand():
     assert results[
         "autonomy_rate_percent"
     ] == 33.3333
+
+def test_equivalent_cycles_use_total_throughput():
+    environment = create_test_environment()
+
+    results = evaluate_policy(
+        policy_name="rule_based",
+        environment=environment,
+        action_selector=rule_based_policy,
+    )
+
+    assert results[
+        "battery_throughput_kwh"
+    ] == 3.85
+
+    assert results[
+        "battery_degradation_cost"
+    ] == 0.0385
+
+    assert results[
+        "equivalent_battery_cycles"
+    ] == 0.1925
