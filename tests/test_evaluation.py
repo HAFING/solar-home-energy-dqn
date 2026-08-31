@@ -38,13 +38,13 @@ def create_test_environment():
 
 def test_rule_based_policy_charges_then_discharges():
     environment = create_test_environment()
-    state = environment.reset()
+    state, _ = environment.reset()
 
     first_action = rule_based_policy(state, environment)
 
     assert first_action == EnergyEnvironment.CHARGE
 
-    state, _, _, _ = environment.step(first_action)
+    state, _, _, _, _ = environment.step(first_action)
 
     second_action = rule_based_policy(state, environment)
 

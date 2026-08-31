@@ -37,7 +37,7 @@ def run_training_episode(
 ) -> dict:
     """Exécute un épisode d'apprentissage complet."""
 
-    state = environment.reset()
+    state, _ = environment.reset()
     done = False
 
     total_reward = 0.0
@@ -50,7 +50,11 @@ def run_training_episode(
     while not done:
         action = agent.act(state, explore=True)
 
-        next_state, reward, done, info = environment.step(action)
+        next_state, reward, terminated, truncated, info = (
+         environment.step(action)
+        )
+
+        done = terminated or truncated
 
         agent.remember(
             state,
@@ -95,7 +99,7 @@ def evaluate_agent(
 ) -> dict:
     """Évalue l'agent sans exploration et sans apprentissage."""
 
-    state = environment.reset()
+    state, _ = environment.reset()
     done = False
 
     total_reward = 0.0
@@ -106,7 +110,11 @@ def evaluate_agent(
     while not done:
         action = agent.act(state, explore=False)
 
-        next_state, reward, done, info = environment.step(action)
+        next_state, reward, terminated, truncated, info = (
+            environment.step(action)
+        )
+
+        done = terminated or truncated
 
         total_reward += reward
         total_grid_import += info["grid_import"]

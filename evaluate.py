@@ -56,7 +56,7 @@ def evaluate_policy(
 ) -> dict:
     """Évalue une politique sur un épisode complet."""
 
-    state = environment.reset()
+    state, _ = environment.reset()
     done = False
 
     total_reward = 0.0
@@ -74,7 +74,8 @@ def evaluate_policy(
         action = action_selector(state, environment)
         action_counts[action] += 1
 
-        next_state, reward, done, info = environment.step(action)
+        next_state, reward, terminated, truncated, info = ( environment.step(action))
+        done = terminated or truncated
 
         total_reward += reward
         total_grid_import += info["grid_import"]
