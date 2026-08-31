@@ -13,7 +13,7 @@ L’objectif est d’équilibrer l’autonomie énergétique, la continuité de 
 | Metanha | Préparation, nettoyage et normalisation des données énergétiques |
 | Takor | Modélisation de l’environnement énergétique et de la batterie |
 | Ndiaye | Implémentation manuelle du DQN avec PyTorch |
-| Davy | Intégration, méthodologie, entraînement, évaluation, expériences et visualisation |
+| Davy | Intégration, méthodologie, entraînement, évaluation, expériences, visualisation et démonstration Gradio |
 
 ## Objectifs
 
@@ -57,6 +57,8 @@ Entraînement et validation
 Évaluation sur données de test
         ↓
 Expériences multi-graines et comparaison
+        ↓
+Démonstration interactive Gradio
 ```
 
 ## Données
@@ -348,6 +350,27 @@ results/figures/training_progress.png
 results/figures/policy_comparison.png
 ```
 
+### Lancer la démonstration Gradio
+
+```powershell
+python app.py
+```
+
+Ouvrez ensuite l’adresse locale affichée par PowerShell, généralement :
+
+```text
+http://127.0.0.1:7860
+```
+
+L’interface comporte quatre onglets :
+
+- comparaison des politiques ;
+- analyse détaillée de la politique sélectionnée ;
+- graphiques du projet ;
+- méthodologie.
+
+Elle permet également de relancer l’évaluation officielle à partir du modèle enregistré.
+
 ### Exécuter les tests
 
 ```powershell
@@ -434,7 +457,7 @@ Améliorations envisageables :
 - effectuer une recherche d’hyperparamètres ;
 - comparer DQN, Double DQN et Dueling DQN ;
 - utiliser les capacités de parallélisation de RLlib pour des campagnes plus larges ;
-- ajouter une interface interactive avec Gradio.
+- permettre à l’utilisateur de modifier les paramètres de simulation dans Gradio.
 
 ## Structure du dépôt
 
@@ -459,6 +482,7 @@ solar-home-energy-dqn/
 │   ├── prepare_data.py
 │   └── replay_buffer.py
 ├── tests/
+├── app.py
 ├── evaluate.py
 ├── plot_results.py
 ├── run_experiments.py
@@ -497,6 +521,8 @@ Entraînement et validation
 Évaluation sur données de test
     ↓
 Analyse reproductible sur plusieurs graines
+    ↓
+Démonstration interactive
 ```
 
-Le DQN réduit la dépendance au réseau et obtient la meilleure autonomie énergétique. La comparaison avec une politique à règles met également en évidence l’importance de la conception de la récompense et de la préservation de la batterie.
+Le DQN réduit la dépendance au réseau et obtient la meilleure autonomie énergétique. La comparaison avec une politique à règles met également en évidence l’importance de la conception de la récompense, de la continuité de service et de la préservation de la batterie.
