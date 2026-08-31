@@ -1,4 +1,4 @@
-policy,reward,grid_import_kwh,unmet_demand_kwh,battery_charge_kwh,battery_discharge_kwh,equivalent_battery_cycles,autonomy_rate_percent,demand_satisfaction_percent,final_soc,outage_hours,idle_actions,charge_actions,discharge_actions
-idle,-421.794922,493.751278,24.21561,0.0,0.0,0.0,30.5555,96.5942,0.5,63,1320,0,0
-rule_based,-307.012932,493.751278,1.21078,30.552514,24.21561,2.421561,30.5555,99.8297,0.980928,63,1128,136,56
-dqn,-307.444363,457.081215,8.569371,55.718589,55.069791,5.506979,35.713,98.7947,0.286287,63,263,918,139
+policy,reward,grid_import_kwh,unmet_demand_kwh,battery_charge_kwh,battery_discharge_kwh,battery_throughput_kwh,battery_degradation_cost,equivalent_battery_cycles,autonomy_rate_percent,demand_satisfaction_percent,final_soc,outage_hours,idle_actions,charge_actions,discharge_actions
+idle,-421.794922,493.751278,24.21561,0.0,0.0,0.0,0.0,0.0,27.1497,96.5942,0.5,63,1320,0,0
+rule_based,-307.303181,493.751278,1.21078,0.0,24.21561,53.240498,0.532405,2.662025,30.3852,99.8297,0.980928,63,1171,93,56
+dqn,-322.314097,454.277241,12.000889,0.0,54.409218,106.681304,1.066813,5.334065,34.4195,98.3121,0.286287,63,169,960,191
