@@ -65,3 +65,16 @@ def test_evaluate_idle_policy_returns_expected_metrics():
     assert results["battery_charge_kwh"] == 0
     assert 0 <= results["demand_satisfaction_percent"] <= 100
     assert results["outage_hours"] == 1
+
+def test_autonomy_excludes_unmet_demand():
+    environment = create_test_environment()
+
+    results = evaluate_policy(
+        policy_name="idle",
+        environment=environment,
+        action_selector=idle_policy,
+    )
+
+    assert results[
+        "autonomy_rate_percent"
+    ] == 33.3333

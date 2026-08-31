@@ -136,7 +136,10 @@ def evaluate_policy(
         100
         * (
             1
-            - total_grid_import
+            - (
+                total_grid_import
+                + total_unmet_demand
+            )
             / total_consumption
         )
         if total_consumption > 0
