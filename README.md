@@ -2,7 +2,7 @@
 
 Projet académique de Reinforcement Learning réalisé dans le cadre du Master en Intelligence Artificielle du Dakar Institute of Technology.
 
-Le projet entraîne un agent Deep Q-Network (DQN), implémenté manuellement avec PyTorch, pour piloter la batterie d’une maison équipée de panneaux solaires et connectée à un réseau électrique sujet à des coupures.
+Le projet entraîne un agent Deep Q-Network (DQN), implémenté manuellement avec PyTorch, afin de piloter la batterie d’une maison équipée de panneaux solaires et connectée à un réseau électrique sujet à des coupures.
 
 L’objectif est d’équilibrer l’autonomie énergétique, la continuité de service pendant les coupures et la préservation de la batterie.
 
@@ -102,7 +102,7 @@ Les données sont séparées sans mélange aléatoire, afin d’éviter l’util
 | Validation | 55 jours | 1 320 |
 | Test | 55 jours | 1 320 |
 
-Les échelles de normalisation de la production solaire et de la consommation sont calculées **uniquement sur l’ensemble d’entraînement**. Les mêmes échelles sont ensuite appliquées à la validation et au test.
+Les échelles de normalisation de la production solaire et de la consommation sont calculées uniquement sur l’ensemble d’entraînement. Les mêmes échelles sont ensuite appliquées à la validation et au test.
 
 Cette précaution évite une fuite d’information depuis les données futures.
 
@@ -122,7 +122,7 @@ Il ajoute la colonne `grid_available` :
 
 Avec la graine `42`, la simulation produit 392 heures de coupure, avec des durées comprises entre une et quatre heures.
 
-Les expériences utilisent plusieurs graines aléatoires pour mesurer la stabilité des résultats.
+Les expériences utilisent plusieurs graines aléatoires afin de mesurer la stabilité des résultats.
 
 ## Environnement de Reinforcement Learning
 
@@ -135,7 +135,7 @@ La classe `EnergyEnvironment` respecte l’API de Gymnasium :
 - l’espace d’actions est discret avec trois actions ;
 - l’espace d’observation contient six variables.
 
-Gymnasium fournit ici une interface standard pour l’environnement ; l’algorithme DQN reste implémenté manuellement avec PyTorch.
+Gymnasium fournit une interface standard pour l’environnement ; l’algorithme DQN reste implémenté manuellement avec PyTorch.
 
 ### État
 
@@ -176,8 +176,6 @@ L’environnement calcule également :
 - le débit énergétique total de la batterie ;
 - le coût de dégradation associé à ce débit ;
 - les cycles équivalents.
-
-Le nombre de cycles équivalents est calculé par :
 
 ```text
 cycles_équivalents = débit_batterie / (2 × capacité_batterie)
@@ -257,6 +255,26 @@ Chaque sortie représente la valeur Q estimée pour une action.
 | Mise à jour du réseau cible | 250 optimisations |
 | Épisodes par expérience | 30 |
 | Graines évaluées | 42, 123, 2026 |
+
+## Métriques d’évaluation
+
+L’autonomie énergétique mesure la part de la consommation qui ne dépend pas du réseau :
+
+```text
+autonomie = 100 × (1 - importation_du_réseau / consommation_totale)
+```
+
+La demande non satisfaite est volontairement suivie dans une métrique distincte, car elle mesure la continuité du service pendant les coupures :
+
+```text
+satisfaction_de_la_demande =
+    100 × (1 - demande_non_satisfaite / consommation_totale)
+```
+
+Cette séparation permet de distinguer clairement :
+
+- la dépendance au réseau ;
+- la capacité à satisfaire la consommation lors des coupures.
 
 ## Installation
 
@@ -360,17 +378,17 @@ La meilleure graine est `42`. Son modèle devient le modèle officiel évalué d
 
 | Politique | Récompense | Import réseau | Demande non satisfaite | Autonomie | Cycles équivalents |
 |---|---:|---:|---:|---:|---:|
-| Batterie inactive | -411,01 ± 9,61 | 496,45 ± 2,40 kWh | 21,52 ± 2,40 kWh | 27,15 ± 0,00 % | 0,00 |
-| Règles simples | -309,27 ± 1,75 | 496,45 ± 2,40 kWh | 1,08 ± 0,12 kWh | 30,02 ± 0,32 % | 2,38 ± 0,25 |
-| DQN | -324,00 ± 9,68 | 454,44 ± 3,19 kWh | 12,31 ± 2,56 kWh | 34,35 ± 0,11 % | 5,29 ± 0,04 |
+| Batterie inactive | -411,01 ± 9,61 | 496,45 ± 2,40 kWh | 21,52 ± 2,40 kWh | 30,04 ± 0,34 % | 0,00 |
+| Règles simples | -309,27 ± 1,75 | 496,45 ± 2,40 kWh | 1,08 ± 0,12 kWh | 30,04 ± 0,34 % | 2,38 ± 0,25 |
+| DQN | -324,00 ± 9,68 | 454,44 ± 3,19 kWh | 12,31 ± 2,56 kWh | 36,09 ± 0,45 % | 5,29 ± 0,04 |
 
 ### Résultats du modèle officiel, graine 42
 
 | Politique | Récompense | Import réseau | Demande non satisfaite | Autonomie | Cycles équivalents |
 |---|---:|---:|---:|---:|---:|
-| Batterie inactive | -421,79 | 493,75 kWh | 24,22 kWh | 27,15 % | 0,00 |
-| Règles simples | -307,30 | 493,75 kWh | 1,21 kWh | 30,39 % | 2,66 |
-| DQN | -322,31 | 454,28 kWh | 12,00 kWh | 34,42 % | 5,33 |
+| Batterie inactive | -421,79 | 493,75 kWh | 24,22 kWh | 30,56 % | 0,00 |
+| Règles simples | -307,30 | 493,75 kWh | 1,21 kWh | 30,56 % | 2,66 |
+| DQN | -322,31 | 454,28 kWh | 12,00 kWh | 36,11 % | 5,33 |
 
 ![Progression de l’entraînement](results/figures/training_progress.png)
 
@@ -381,11 +399,11 @@ La meilleure graine est `42`. Son modèle devient le modèle officiel évalué d
 Comparativement à une batterie inactive, le DQN :
 
 - réduit l’importation moyenne du réseau d’environ 42 kWh ;
-- augmente l’autonomie moyenne de 7,20 points ;
+- augmente l’autonomie moyenne de 6,05 points ;
 - réduit la demande non satisfaite moyenne ;
 - produit des résultats stables sur les trois graines.
 
-La stratégie à règles simples reste cependant meilleure pour :
+La stratégie à règles simples reste néanmoins meilleure pour :
 
 - la récompense globale ;
 - la limitation de la demande non satisfaite ;

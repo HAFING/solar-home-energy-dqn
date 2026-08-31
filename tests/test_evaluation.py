@@ -77,7 +77,7 @@ def test_autonomy_excludes_unmet_demand():
 
     assert results[
         "autonomy_rate_percent"
-    ] == 33.3333
+    ] == 66.6667
 
 def test_equivalent_cycles_use_total_throughput():
     environment = create_test_environment()
